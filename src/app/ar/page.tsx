@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import ARView from './three-ar'
 
 export const metadata = {
@@ -5,5 +6,9 @@ export const metadata = {
 }
 
 export default function ARPage() {
-  return <ARView />
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading...</div>}>
+      <ARView />
+    </Suspense>
+  )
 }

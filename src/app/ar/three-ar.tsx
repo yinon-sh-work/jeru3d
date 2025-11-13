@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import * as THREE from 'three'
 /* eslint-disable-next-line @typescript-eslint/ban-ts-comment */
 // @ts-expect-error
@@ -11,8 +12,22 @@ type AOI = { minLon:number, minLat:number, maxLon:number, maxLat:number }
 export default function ARView(){
   const container = useRef<HTMLDivElement|null>(null)
   const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY as string
+  const searchParams = useSearchParams()
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState(!apiKey ? '⚠️ MapTiler API key not configured' : '')
+  const [aoi, setAOI] = useState<AOI | null>(null)
+
+  // Parse AOI from URL params
+  useEffect(() => {
+    const minLon = parseFloat(searchParams.get('minLon') || '')
+    const minLat = parseFloat(searchParams.get('minLat') || '')
+    const maxLon = parseFloat(searchParams.get('maxLon') || '')
+    const maxLat = parseFloat(searchParams.get('maxLat') || '')
+
+    if (!isNaN(minLon) && !isNaN(minLat) && !isNaN(maxLon) && !isNaN(maxLat)) {
+      setAOI({ minLon, minLat, maxLon, maxLat })
+    }
+  }, [searchParams])
 
   useEffect(()=>{
     if (!container.current) return
@@ -62,19 +77,19 @@ export default function ARView(){
     // Build mesh from Terrain-RGB via Worker, then place on select
     const controller = renderer.xr.getController(0)
     controller.addEventListener('select', async ()=>{
-      if (!reticle.visible || busy) return
+      if (!reticle.visible || busy || !aoi) return
       try {
         setBusy(true); setStatus('Downloading terrain...')
-        const aoi: AOI = { minLon: 35.0, minLat: 31.3, maxLon: 35.5, maxLat: 32.0 } // סביב ירושלים לדוגמה
         const mesh = await buildTerrainMeshFromTiles(apiKey, aoi, 12, 14)
         mesh.rotation.x = -Math.PI/2
         mesh.position.setFromMatrixPosition(reticle.matrix)
         scene.add(mesh); placed.push(mesh)
-        setStatus('')
+        setStatus('✓ Terrain loaded!')
+        setTimeout(() => setStatus(''), 2000)
       } catch (e) {
         /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const err = e as any
-        setStatus(err?.message || String(err))
+        setStatus(err?.message || String(e))
       } finally { setBusy(false) }
     })
     scene.add(controller)
@@ -95,10 +110,20 @@ export default function ARView(){
 
     const containerRef = container.current
     return ()=>{ window.removeEventListener('resize', onResize); renderer.setAnimationLoop(null); renderer.dispose(); containerRef?.replaceChildren() }
-  }, [apiKey, busy])
+  }, [apiKey, busy, aoi])
 
   return <div ref={container} style={{width:'100vw', height:'100vh', background:'transparent'}}>
-    {status && <div style={{position:'absolute',left:12,top:60, background:'rgba(0,0,0,.6)',color:'#fff',padding:8,borderRadius:8,zIndex:20}}>{status}</div>}
+    <div style={{position:'absolute',top:12,left:12,background:'rgba(0,0,0,.6)',color:'#fff',padding:8,borderRadius:8,zIndex:20}}>
+      <div>🌍 Jerusalem AR Terrain Viewer</div>
+      {aoi ? (
+        <div style={{marginTop:6,fontSize:12}}>
+          Region: {aoi.minLat.toFixed(3)}° - {aoi.maxLat.toFixed(3)}°N, {aoi.minLon.toFixed(3)}° - {aoi.maxLon.toFixed(3)}°E
+        </div>
+      ) : (
+        <div style={{marginTop:6,fontSize:12,color:'#faa'}}>No region selected</div>
+      )}
+    </div>
+    {status && <div style={{position:'absolute',left:12,bottom:60, background:'rgba(0,0,0,.6)',color:'#fff',padding:8,borderRadius:8,zIndex:20}}>{status}</div>}
   </div>
 }
 
