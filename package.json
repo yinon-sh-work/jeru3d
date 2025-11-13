@@ -1,0 +1,27 @@
+{
+  "name": "jeru3d-web",
+  "version": "1.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@watergis/maplibre-gl-terradraw": "^1.9.5",
+    "maplibre-gl": "^5.0.0",
+    "next": "^14.2.33",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "three": "^0.164.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.10",
+    "typescript": "^5.6.3"
+  }
+}
