@@ -6,6 +6,7 @@ import * as THREE from 'three'
 // @ts-expect-error
 import { ARButton } from 'three/addons/webxr/ARButton.js'
 import { metersPerDegree } from '@/lib/tile'
+import type { LayerItem } from '@/components/layer-editor'
 
 type AOI = { minLon:number, minLat:number, maxLon:number, maxLat:number }
 
@@ -16,6 +17,7 @@ export default function ARView(){
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState(!apiKey ? '⚠️ MapTiler API key not configured' : '')
   const [aoi, setAOI] = useState<AOI | null>(null)
+  const [layers, setLayers] = useState<LayerItem[]>([])
 
   // Parse AOI from URL params
   useEffect(() => {
@@ -26,6 +28,18 @@ export default function ARView(){
 
     if (!isNaN(minLon) && !isNaN(minLat) && !isNaN(maxLon) && !isNaN(maxLat)) {
       setAOI({ minLon, minLat, maxLon, maxLat })
+    }
+
+    // Load layers from sessionStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem('jeru3d_layers')
+        if (stored) {
+          setLayers(JSON.parse(stored))
+        }
+      } catch (e) {
+        console.error('Failed to load layers from sessionStorage:', e)
+      }
     }
   }, [searchParams])
 

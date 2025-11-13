@@ -8,6 +8,7 @@ import LayerEditor, { LayerItem, LayerEditorHandle } from './layer-editor'
 interface MapSelectorProps {
   onSelectAOI: (aoi: { minLon: number; minLat: number; maxLon: number; maxLat: number } | null) => void
   selectedAOI: { minLon: number; minLat: number; maxLon: number; maxLat: number } | null
+  onLayersChange?: (layers: LayerItem[]) => void
 }
 
 const PRESET_AREAS = [
@@ -17,7 +18,7 @@ const PRESET_AREAS = [
   { name: 'Temple Mount', minLon: 35.2346, minLat: 31.7738, maxLon: 35.2371, maxLat: 31.7759 },
 ]
 
-export default function MapSelector({ onSelectAOI, selectedAOI }: MapSelectorProps) {
+export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }: MapSelectorProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<maplibregl.Map | null>(null)
   const layerEditorRef = useRef<LayerEditorHandle>(null)
@@ -26,11 +27,16 @@ export default function MapSelector({ onSelectAOI, selectedAOI }: MapSelectorPro
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [layers, setLayers] = useState<LayerItem[]>([])
   const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY || ''
+  const [showPresets, setShowPresets] = useState(false)
 
   const handleLayersChange = (newLayers: LayerItem[]) => {
     setLayers(newLayers)
     // Update points on map
     updateLayerPointsOnMap(newLayers)
+    // Notify parent component
+    if (onLayersChange) {
+      onLayersChange(newLayers)
+    }
   }
 
   const updateLayerPointsOnMap = (layerList: LayerItem[]) => {
@@ -277,49 +283,24 @@ export default function MapSelector({ onSelectAOI, selectedAOI }: MapSelectorPro
         cursor: drawing ? 'crosshair' : 'grab',
       }}
     >
-      <div
-        style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-          background: '#fff',
-          padding: '12px',
-          borderRadius: '8px',
-          boxShadow: '0 2px 8px rgba(0,0,0,.15)',
-          zIndex: 20,
-          maxWidth: '280px',
-        }}
-      >
-        <h4 style={{ margin: '0 0 10px 0', fontSize: '12px', color: '#333', fontWeight: 'bold' }}>
-          📍 בחר אזור במהירות:
-        </h4>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-          {PRESET_AREAS.map(area => (
-            <button
-              key={area.name}
-              onClick={() => onSelectAOI(area)}
-              style={{
-                padding: '8px',
-                background: '#007bff',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                transition: 'background 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                (e.target as HTMLButtonElement).style.background = '#0056b3'
-              }}
-              onMouseLeave={(e) => {
-                (e.target as HTMLButtonElement).style.background = '#007bff'
-              }}
-            >
-              {area.name}
-            </button>
-          ))}
-        </div>
+      {/* Preset toggle button */}
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 25 }}>
+        {!showPresets && (
+          <button onClick={() => setShowPresets(true)} title="Quick select" style={{ width: 44, height: 44, borderRadius: 22, border: 'none', background: 'rgba(255,255,255,0.9)', boxShadow: '0 6px 18px rgba(16,24,40,0.12)', cursor: 'pointer' }}>📍</button>
+        )}
+        {showPresets && (
+          <div style={{ background: 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 10, boxShadow: '0 12px 40px rgba(16,24,40,0.12)', backdropFilter: 'blur(6px)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <strong style={{ fontSize: 13 }}>בחר אזור</strong>
+              <button onClick={() => setShowPresets(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {PRESET_AREAS.map(area => (
+                <button key={area.name} onClick={() => { onSelectAOI(area); setShowPresets(false) }} style={{ padding: 8, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>{area.name}</button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div
