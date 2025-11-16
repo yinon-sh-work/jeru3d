@@ -85,11 +85,15 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
 
     map.current = new maplibregl.Map({
       container: mapContainer.current,
-      style: `https://api.maptiler.com/maps/satellite/style.json?key=${apiKey}`,
+      // use MapTiler hybrid style for a nicer basemap (satellite + labels)
+      style: `https://api.maptiler.com/maps/hybrid/style.json?key=${apiKey}`,
       center: [35.2, 31.77], // Jerusalem center
       zoom: 12,
       attributionControl: false,
     })
+
+    // add simple navigation controls (zoom + rotation)
+    map.current.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right')
 
     map.current.on('load', () => {
       // Add selection layer (initially empty)

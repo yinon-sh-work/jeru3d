@@ -14,6 +14,8 @@ declare global {
 import { ARButton } from 'three/addons/webxr/ARButton.js'
 import { metersPerDegree } from '@/lib/tile'
 import type { LayerItem } from '@/components/layer-editor'
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 type AOI = { minLon:number, minLat:number, maxLon:number, maxLat:number }
 
@@ -155,29 +157,119 @@ export default function ARView(){
       } finally { setBusy(false) }
     })
     scene.add(controller)
+    // For non-AR devices we'll provide a 3D viewer fallback via an explicit button
+    const show3DViewer = () => {
+      if (!aoi) { setStatus('בחר אזור קודם, ואז פתח תצוגת 3D'); return }
+      setStatus('Loading 3D view...')
+      setBusy(true)
+      buildTerrainMeshFromTiles(apiKey, aoi, 12, 14).then(mesh => {
+        mesh.rotation.x = -Math.PI/2
+        mesh.position.set(0, 0, 0)
 
-      // Load initial terrain if AOI is available (for non-AR fallback view)
-      if (aoi && !busy) {
-        setBusy(true)
-        buildTerrainMeshFromTiles(apiKey, aoi, 12, 14).then(mesh => {
-          mesh.rotation.x = -Math.PI/2
-          mesh.position.set(0, 0, 0)
-          scene.add(mesh)
-          // Position camera to view the terrain
-          const dist = Math.max(
-            (aoi.maxLon - aoi.minLon) * 111320,
-            (aoi.maxLat - aoi.minLat) * 110540
-          ) / 2
-          camera.position.set(0, dist * 0.5, dist * 0.7)
-          camera.lookAt(0, 0, 0)
-          setStatus('✓ Terrain loaded! (Standard 3D view)')
-          setTimeout(() => setStatus(''), 3000)
-          setBusy(false)
-        }).catch(err => {
-          setStatus('Error loading terrain: ' + (err?.message || String(err)))
-          setBusy(false)
-        })
-      }
+        // create a simple overlay container for the 3D viewer
+        const overlay = document.createElement('div')
+        overlay.style.position = 'fixed'
+        overlay.style.left = '0'
+        overlay.style.top = '0'
+        overlay.style.width = '100vw'
+        overlay.style.height = '100vh'
+        overlay.style.zIndex = '99999'
+        overlay.style.background = '#111'
+        document.body.appendChild(overlay)
+
+        // viewer renderer
+        const viewer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+        viewer.setSize(window.innerWidth, window.innerHeight)
+        overlay.appendChild(viewer.domElement)
+
+        const vScene = new THREE.Scene()
+        const vCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000)
+        vScene.add(new THREE.AmbientLight(0xffffff, 0.9))
+        const sunlight = new THREE.DirectionalLight(0xffffff, 0.6)
+        sunlight.position.set(1, 2, 3)
+        vScene.add(sunlight)
+
+        vScene.add(mesh)
+
+        // center camera based on mesh bbox
+        const bbox = new THREE.Box3().setFromObject(mesh)
+        const size = bbox.getSize(new THREE.Vector3())
+        const center = bbox.getCenter(new THREE.Vector3())
+        vCamera.position.set(center.x, center.y + Math.max(size.x, size.z) * 0.8, center.z + Math.max(size.x, size.z) * 0.8)
+        vCamera.lookAt(center)
+
+        const controls = new OrbitControls(vCamera, viewer.domElement)
+        controls.target.copy(center)
+        controls.update()
+
+        // add export button
+        const btnExport = document.createElement('button')
+        btnExport.textContent = 'Download GLB'
+        btnExport.style.position = 'absolute'
+        btnExport.style.right = '12px'
+        btnExport.style.top = '12px'
+        btnExport.style.zIndex = '100000'
+        btnExport.style.padding = '8px 12px'
+        btnExport.style.background = '#28a745'
+        btnExport.style.color = '#fff'
+        btnExport.style.border = 'none'
+        btnExport.style.borderRadius = '6px'
+        overlay.appendChild(btnExport)
+
+        btnExport.onclick = () => {
+          try {
+            const exporter = new GLTFExporter()
+            exporter.parse(mesh, (result) => {
+              let blob: Blob
+              if (result instanceof ArrayBuffer) {
+                blob = new Blob([result], { type: 'model/gltf-binary' })
+              } else {
+                const json = JSON.stringify(result)
+                blob = new Blob([json], { type: 'application/json' })
+              }
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'terrain.glb'
+              a.click()
+            }, { binary: true })
+          } catch (unknownErr) {
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const err = unknownErr as any
+            console.error('Export failed', err)
+            alert('Export failed: ' + String(err))
+          }
+        }
+
+        const btnClose = document.createElement('button')
+        btnClose.textContent = 'Close'
+        btnClose.style.position = 'absolute'
+        btnClose.style.left = '12px'
+        btnClose.style.top = '12px'
+        btnClose.style.zIndex = '100000'
+        btnClose.style.padding = '8px 12px'
+        btnClose.style.background = '#444'
+        btnClose.style.color = '#fff'
+        btnClose.style.border = 'none'
+        btnClose.style.borderRadius = '6px'
+        overlay.appendChild(btnClose)
+        btnClose.onclick = () => { window.removeEventListener('resize', onViewerResize); viewer.dispose(); document.body.removeChild(overlay); setStatus(''); }
+
+        const onViewerResize = () => { vCamera.aspect = window.innerWidth / window.innerHeight; vCamera.updateProjectionMatrix(); viewer.setSize(window.innerWidth, window.innerHeight) }
+        window.addEventListener('resize', onViewerResize)
+
+        const animateViewer = () => { viewer.render(vScene, vCamera); requestAnimationFrame(animateViewer) }
+        animateViewer()
+
+        setStatus('✓ 3D view ready')
+        setBusy(false)
+      }).catch((unknownErr) => {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        const err = unknownErr as any
+        setStatus('Error loading terrain: ' + (err?.message || String(err)))
+        setBusy(false)
+      })
+    }
 
     renderer.setAnimationLoop((time, frame)=>{
       if (frame && hitTestSource && localSpace){
@@ -189,6 +281,34 @@ export default function ARView(){
       }
       renderer.render(scene, camera)
     })
+
+    // If AR is not supported, add an on-screen button for the 3D viewer fallback
+    const add3DFallbackButton = () => {
+      if (!container.current) return
+      // avoid duplicate
+      if (container.current.querySelector('.jeru3d-3d-btn')) return
+      const fallbackBtn = document.createElement('button')
+      fallbackBtn.className = 'jeru3d-3d-btn'
+      fallbackBtn.textContent = 'פתח תצוגת 3D'
+      fallbackBtn.style.position = 'absolute'
+      fallbackBtn.style.right = '12px'
+      fallbackBtn.style.bottom = '12px'
+      fallbackBtn.style.zIndex = '9999'
+      fallbackBtn.style.padding = '10px 14px'
+      fallbackBtn.style.background = '#007bff'
+      fallbackBtn.style.color = '#fff'
+      fallbackBtn.style.border = 'none'
+      fallbackBtn.style.borderRadius = '8px'
+      fallbackBtn.onclick = (ev) => { ev.preventDefault(); show3DViewer() }
+      container.current.appendChild(fallbackBtn)
+    }
+
+    // attach fallback button if no AR button was created after XR check
+    setTimeout(() => {
+      if (!container.current) return
+      const hasAR = !!container.current.querySelector('button[title="Enter AR"]') || !!container.current.querySelector('button[aria-label*="AR"]')
+      if (!hasAR) add3DFallbackButton()
+    }, 1200)
 
       const onResize = ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight) }
       window.addEventListener('resize', onResize)
