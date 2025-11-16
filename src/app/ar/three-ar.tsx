@@ -2,6 +2,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import * as THREE from 'three'
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+declare global {
+  interface Navigator {
+    xr?: Record<string, unknown>
+  }
+}
 /* eslint-disable-next-line @typescript-eslint/ban-ts-comment */
 // @ts-expect-error
 import { ARButton } from 'three/addons/webxr/ARButton.js'
@@ -60,8 +67,34 @@ export default function ARView(){
     renderer.xr.enabled = true
     container.current.appendChild(renderer.domElement)
 
-    const btn = ARButton.createButton(renderer, { requiredFeatures:['hit-test'] })
-    container.current.appendChild(btn)
+      let btn: HTMLElement | null = null
+
+      // Check for WebXR support and create button
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        const xr = (navigator as any).xr as Record<string, unknown> | undefined
+        if (xr) {
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+          (xr as any).isSessionSupported('immersive-ar').then((supported: boolean) => {
+          if (supported) {
+            try {
+              btn = ARButton.createButton(renderer, { requiredFeatures:['hit-test'] })
+              if (btn && container.current && !container.current.querySelector('button')) {
+                container.current.appendChild(btn)
+              }
+            } catch (e) {
+              console.error('Failed to create AR button:', e)
+              setStatus('⚠️ AR mode not available on this device')
+            }
+          } else {
+            setStatus('⚠️ AR not supported on this device. Using standard 3D view.')
+          }
+        }).catch(err => {
+          console.error('WebXR check failed:', err)
+          setStatus('⚠️ AR not available. Using standard 3D view.')
+        })
+      } else {
+        setStatus('⚠️ WebXR not supported on this device. Using standard 3D view.')
+      }
 
     const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.0)
     scene.add(light)
@@ -110,6 +143,29 @@ export default function ARView(){
       } finally { setBusy(false) }
     })
     scene.add(controller)
+
+      // Load initial terrain if AOI is available (for non-AR fallback view)
+      if (aoi && !busy) {
+        setBusy(true)
+        buildTerrainMeshFromTiles(apiKey, aoi, 12, 14).then(mesh => {
+          mesh.rotation.x = -Math.PI/2
+          mesh.position.set(0, 0, 0)
+          scene.add(mesh)
+          // Position camera to view the terrain
+          const dist = Math.max(
+            (aoi.maxLon - aoi.minLon) * 111320,
+            (aoi.maxLat - aoi.minLat) * 110540
+          ) / 2
+          camera.position.set(0, dist * 0.5, dist * 0.7)
+          camera.lookAt(0, 0, 0)
+          setStatus('✓ Terrain loaded! (Standard 3D view)')
+          setTimeout(() => setStatus(''), 3000)
+          setBusy(false)
+        }).catch(err => {
+          setStatus('Error loading terrain: ' + (err?.message || String(err)))
+          setBusy(false)
+        })
+      }
 
     renderer.setAnimationLoop((time, frame)=>{
       if (frame && hitTestSource && localSpace){
