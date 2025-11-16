@@ -42,26 +42,24 @@ const LayerEditor = forwardRef<LayerEditorHandle, LayerEditorProps>(
       onLayersChange(updatedLayers)
     }
 
-    const handleAddPoint = (lat: number, lon: number) => {
-      if (!placingMode) return
-
-      const newItem: LayerItem = {
-        id: `${Date.now()}-${Math.random()}`,
-        layerName: selectedLayer,
-        symbolType: selectedSymbol,
-        lat,
-        lon,
-      }
-
-      const updatedLayers = [...layers, newItem]
-      setLayers(updatedLayers)
-      onLayersChange(updatedLayers)
-      setPlacingMode(false)
-    }
-
     useImperativeHandle(ref, () => ({
-      handleAddPoint,
-    }), [handleAddPoint])
+      handleAddPoint: (lat: number, lon: number) => {
+        if (!placingMode) return
+
+        const newItem: LayerItem = {
+          id: `${Date.now()}-${Math.random()}`,
+          layerName: selectedLayer,
+          symbolType: selectedSymbol,
+          lat,
+          lon,
+        }
+
+        const updatedLayers = [...layers, newItem]
+        setLayers(updatedLayers)
+        onLayersChange(updatedLayers)
+        setPlacingMode(false)
+      }
+    }), [placingMode, selectedLayer, selectedSymbol, layers, onLayersChange])
 
     const layerCounts = LAYER_COLORS.map(
       c => layers.filter(l => l.layerName === c.key).length

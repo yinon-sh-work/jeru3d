@@ -21,7 +21,7 @@ export default function Page() {
 
   const generateARLink = () => {
     if (!selectedAOI) return '#'
-    let link = `/ar?minLon=${selectedAOI.minLon}&minLat=${selectedAOI.minLat}&maxLon=${selectedAOI.maxLon}&maxLat=${selectedAOI.maxLat}`
+    const link = `/ar?minLon=${selectedAOI.minLon}&minLat=${selectedAOI.minLat}&maxLon=${selectedAOI.maxLon}&maxLat=${selectedAOI.maxLat}`
     if (layers.length > 0 && typeof window !== 'undefined') {
       sessionStorage.setItem('jeru3d_layers', JSON.stringify(layers))
     }

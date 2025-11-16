@@ -17,7 +17,7 @@ export default function ARView(){
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState(!apiKey ? '⚠️ MapTiler API key not configured' : '')
   const [aoi, setAOI] = useState<AOI | null>(null)
-  const [layers, setLayers] = useState<LayerItem[]>([])
+  // Layers are loaded for potential future use; currently not used directly in this view
 
   // Parse AOI from URL params
   useEffect(() => {
@@ -30,12 +30,15 @@ export default function ARView(){
       setAOI({ minLon, minLat, maxLon, maxLat })
     }
 
-    // Load layers from sessionStorage
+    // Load layers from sessionStorage (kept for future rendering of markers in AR)
     if (typeof window !== 'undefined') {
       try {
         const stored = sessionStorage.getItem('jeru3d_layers')
         if (stored) {
-          setLayers(JSON.parse(stored))
+          // parse and keep for debugging or future use
+          const _loaded = JSON.parse(stored) as LayerItem[]
+          // reference variable to satisfy lint rules (kept for future use)
+          void _loaded
         }
       } catch (e) {
         console.error('Failed to load layers from sessionStorage:', e)
