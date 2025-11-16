@@ -55,11 +55,23 @@ export default function ARView(){
 
   useEffect(()=>{
     if (!container.current) return
+    // global client-side error listener to surface issues into the UI
+    const onError = (ev: ErrorEvent) => {
+      try {
+        console.error('Client-side error in AR page:', ev.error || ev.message)
+        setStatus('Application error: ' + (ev.error?.message || ev.message))
+      } catch {
+        // ignore
+      }
+    }
+    window.addEventListener('error', onError)
     if (!apiKey) {
       container.current.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:20px;color:#f00;">MapTiler API key is required. Add NEXT_PUBLIC_MAPTILER_KEY to your .env.local</div>'
-      return
+      return () => { window.removeEventListener('error', onError) }
     }
-    const scene = new THREE.Scene()
+    // Wrap initialization in try/catch so any synchronous error surfaces to the status
+    try {
+      const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 200)
     const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true })
     renderer.setSize(window.innerWidth, window.innerHeight)
@@ -113,7 +125,7 @@ export default function ARView(){
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     let localSpace: any = null
 
-    function onSessionStart(){
+    const onSessionStart = () => {
       const session = renderer.xr.getSession()!
       session.requestReferenceSpace('viewer').then(space => {
         session.requestHitTestSource({ space }).then(source => { hitTestSource = source })
@@ -178,11 +190,25 @@ export default function ARView(){
       renderer.render(scene, camera)
     })
 
-    const onResize = ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight) }
-    window.addEventListener('resize', onResize)
+      const onResize = ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight) }
+      window.addEventListener('resize', onResize)
 
-    const containerRef = container.current
-    return ()=>{ window.removeEventListener('resize', onResize); renderer.setAnimationLoop(null); renderer.dispose(); containerRef?.replaceChildren() }
+      const containerRef = container.current
+      return ()=>{
+        window.removeEventListener('resize', onResize)
+        window.removeEventListener('error', onError)
+        renderer.setAnimationLoop(null)
+        renderer.dispose()
+        containerRef?.replaceChildren()
+      }
+    } catch (err) {
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+      const e = err as any
+      console.error('AR init error:', e)
+      setStatus('Application error: ' + (e?.message || String(e)))
+      window.removeEventListener('error', onError)
+      return () => { /* nothing to cleanup */ }
+    }
   }, [apiKey, busy, aoi])
 
   return <div ref={container} style={{width:'100vw', height:'100vh', background:'transparent'}}>

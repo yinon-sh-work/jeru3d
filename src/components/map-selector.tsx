@@ -24,6 +24,9 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
   const layerEditorRef = useRef<LayerEditorHandle>(null)
   const [drawing, setDrawing] = useState(false)
   const [startCoords, setStartCoords] = useState<[number, number] | null>(null)
+  const [selectionRect, setSelectionRect] = useState<{ minLon:number; minLat:number; maxLon:number; maxLat:number } | null>(null)
+  const [moving, setMoving] = useState(false)
+  const rectAnchorRef = useRef<{ minLon:number; minLat:number; maxLon:number; maxLat:number } | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [layers, setLayers] = useState<LayerItem[]>([])
   const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY || ''
@@ -150,24 +153,45 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
       })
     })
 
-    // Mouse down: start drawing or add point
+    // Mouse down: start move of existing rectangle or (when not selecting) add point
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     map.current?.on('mousedown', (e: any) => {
       if (e.originalEvent?.button !== 0) return // Left click only
-      setDrawing(true)
+
+      if (drawing && selectionRect) {
+        // if click inside rectangle -> start moving
+        const lng = e.lngLat.lng
+        const lat = e.lngLat.lat
+        if (lng >= selectionRect.minLon && lng <= selectionRect.maxLon && lat >= selectionRect.minLat && lat <= selectionRect.maxLat) {
+          setStartCoords([lng, lat])
+          rectAnchorRef.current = { ...selectionRect }
+          setMoving(true)
+        }
+        return
+      }
+
+      // not in selection mode -> treat as point add
       setStartCoords([e.lngLat.lng, e.lngLat.lat])
     })
 
-    // Mouse move: update rectangle while drawing
+    // Mouse move: update rectangle position while moving
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     map.current?.on('mousemove', (e: any) => {
-      if (!drawing || !startCoords) return
+      if (!drawing || !moving || !startCoords || !rectAnchorRef.current) return
 
-      const endCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat]
-      const minLon = Math.min(startCoords[0], endCoords[0])
-      const maxLon = Math.max(startCoords[0], endCoords[0])
-      const minLat = Math.min(startCoords[1], endCoords[1])
-      const maxLat = Math.max(startCoords[1], endCoords[1])
+      const curLng = e.lngLat.lng
+      const curLat = e.lngLat.lat
+      const dLon = curLng - startCoords[0]
+      const dLat = curLat - startCoords[1]
+
+      const anchor = rectAnchorRef.current
+      const newRect = {
+        minLon: anchor.minLon + dLon,
+        maxLon: anchor.maxLon + dLon,
+        minLat: anchor.minLat + dLat,
+        maxLat: anchor.maxLat + dLat,
+      }
+      setSelectionRect(newRect)
 
       const rectangle = {
         type: 'FeatureCollection',
@@ -178,11 +202,11 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
               type: 'Polygon',
               coordinates: [
                 [
-                  [minLon, minLat],
-                  [maxLon, minLat],
-                  [maxLon, maxLat],
-                  [minLon, maxLat],
-                  [minLon, minLat],
+                  [newRect.minLon, newRect.minLat],
+                  [newRect.maxLon, newRect.minLat],
+                  [newRect.maxLon, newRect.maxLat],
+                  [newRect.minLon, newRect.maxLat],
+                  [newRect.minLon, newRect.minLat],
                 ],
               ],
             },
@@ -196,35 +220,49 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
       }
     })
 
-    // Mouse up: finalize selection or add point
+    // Mouse up: finalize move or add point / create rectangle
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     map.current?.on('mouseup', (e: any) => {
-      if (!drawing || !startCoords) return
-      setDrawing(false)
+      // finalize move
+      if (moving && selectionRect && rectAnchorRef.current) {
+        setMoving(false)
+        setStartCoords(null)
+        rectAnchorRef.current = null
+        // finalize selection and notify parent
+        onSelectAOI(selectionRect)
+        // exit selection mode
+        setDrawing(false)
+        return
+      }
 
-      const endCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat]
-      const minLon = Math.min(startCoords[0], endCoords[0])
-      const maxLon = Math.max(startCoords[0], endCoords[0])
-      const minLat = Math.min(startCoords[1], endCoords[1])
-      const maxLat = Math.max(startCoords[1], endCoords[1])
+      // If not moving but selection mode active and no rect exists, create one around drag
+      if (drawing && !selectionRect && startCoords) {
+        const endCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat]
+        const minLon = Math.min(startCoords[0], endCoords[0])
+        const maxLon = Math.max(startCoords[0], endCoords[0])
+        const minLat = Math.min(startCoords[1], endCoords[1])
+        const maxLat = Math.max(startCoords[1], endCoords[1])
 
-      // Check if this is a small click (point placement) vs drag (AOI selection)
-      const isSmallClick = Math.abs(maxLon - minLon) < 0.0005 && Math.abs(maxLat - minLat) < 0.0005
-
-      if (isSmallClick) {
-        // Add point to layer editor
-        if (layerEditorRef.current) {
-          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          layerEditorRef.current.handleAddPoint(e.lngLat.lat, e.lngLat.lng)
-        }
-      } else {
-        // Validate AOI (must be at least 0.01° x 0.01°)
-        if (Math.abs(maxLon - minLon) < 0.01 || Math.abs(maxLat - minLat) < 0.01) {
-          alert('Selection too small. Please select a larger area.')
+        // Validate size
+        if (Math.abs(maxLon - minLon) < 0.0005 || Math.abs(maxLat - minLat) < 0.0005) {
+          // too small, ignore
+          setStartCoords(null)
           return
         }
 
-        onSelectAOI({ minLon, minLat, maxLon, maxLat })
+        const rect = { minLon, minLat, maxLon, maxLat }
+        setSelectionRect(rect)
+        onSelectAOI(rect)
+        setStartCoords(null)
+        setDrawing(false)
+        return
+      }
+
+      // small click: add point (if not in selection mode)
+      if (!drawing && startCoords) {
+        if (layerEditorRef.current) {
+          layerEditorRef.current.handleAddPoint(e.lngLat.lat, e.lngLat.lng)
+        }
       }
 
       setStartCoords(null)
@@ -233,7 +271,7 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
     return () => {
       map.current?.remove()
     }
-  }, [apiKey, drawing, startCoords, onSelectAOI])
+  }, [apiKey, drawing, startCoords, onSelectAOI, moving, selectionRect])
 
   // Update map display when selectedAOI changes
   useEffect(() => {
