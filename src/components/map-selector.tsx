@@ -85,6 +85,7 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
       style: `https://api.maptiler.com/maps/satellite/style.json?key=${apiKey}`,
       center: [35.2, 31.77], // Jerusalem center
       zoom: 12,
+      attributionControl: false,
     })
 
     map.current.on('load', () => {
@@ -283,16 +284,45 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
         cursor: drawing ? 'crosshair' : 'grab',
       }}
     >
+      {/* Select Region button */}
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 25 }}>
+        <button
+          onClick={() => setDrawing(!drawing)}
+          style={{
+            padding: '10px 16px',
+            background: drawing ? '#ff6b6b' : '#007bff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            fontWeight: '700',
+            cursor: 'pointer',
+            fontSize: '13px',
+            boxShadow: '0 2px 8px rgba(0,0,0,.15)',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.25)'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+          }}
+          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,.15)'
+            e.currentTarget.style.transform = 'translateY(0)'
+          }}
+        >
+          {drawing ? '✓ בחר אזור (גרור)' : '📍 בחר אזור'}
+        </button>
+      </div>
+
       {/* Preset toggle button */}
       <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 25 }}>
         {!showPresets && (
-          <button onClick={() => setShowPresets(true)} title="Quick select" style={{ width: 44, height: 44, borderRadius: 22, border: 'none', background: 'rgba(255,255,255,0.9)', boxShadow: '0 6px 18px rgba(16,24,40,0.12)', cursor: 'pointer' }}>📍</button>
+          <button onClick={() => setShowPresets(true)} title="Quick select" style={{ width: 44, height: 44, borderRadius: 22, border: 'none', background: 'rgba(255,255,255,0.9)', boxShadow: '0 2px 8px rgba(0,0,0,.15)', cursor: 'pointer', fontSize: 18 }}>⭐</button>
         )}
         {showPresets && (
-          <div style={{ background: 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 10, boxShadow: '0 12px 40px rgba(16,24,40,0.12)', backdropFilter: 'blur(6px)' }}>
+          <div style={{ background: 'rgba(255,255,255,0.95)', padding: 10, borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,.15)', backdropFilter: 'blur(6px)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <strong style={{ fontSize: 13 }}>בחר אזור</strong>
-              <button onClick={() => setShowPresets(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setShowPresets(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16 }}>✕</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {PRESET_AREAS.map(area => (
@@ -303,26 +333,6 @@ export default function MapSelector({ onSelectAOI, selectedAOI, onLayersChange }
         )}
       </div>
 
-      <div
-        style={{
-          position: 'absolute',
-          top: '10px',
-          right: '10px',
-          background: '#fff',
-          padding: '10px',
-          borderRadius: '5px',
-          fontSize: '12px',
-          color: '#666',
-          boxShadow: '0 2px 4px rgba(0,0,0,.2)',
-          zIndex: 10,
-        }}
-      >
-        <div>🔍 גלול לזום</div>
-        <div>📌 גרור כדי לבחור אזור</div>
-        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #ddd', fontSize: '11px', color: '#999' }}>
-          או לחץ על כפתור למעלה
-        </div>
-      </div>
       <LayerEditor ref={layerEditorRef} onLayersChange={handleLayersChange} />
     </div>
   )
